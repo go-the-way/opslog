@@ -1,0 +1,56 @@
+http:
+  listen: ":8600"
+  # Optional Bearer token for SDK HTTP/WS ingest only (/ingest, /stream).
+  # When set, clients must send: Authorization: Bearer <token>
+  # Unrelated to web.basic_auth (console username/password).
+  # Demo: gin-recover uses OPSLOG_HTTP_TOKEN=change-me (or -token change-me).
+  token: "change-me"
+
+# Web Console Basic Auth — static UI only (/).
+# /api/* query APIs and ingest (/ingest, /stream, TCP/gRPC) are not covered.
+# Optional ingest Bearer: set http.token above.
+# Set enabled: false to disable. Empty password also disables auth.
+# Change the default password before exposing the console.
+web:
+  basic_auth:
+    enabled: true
+    username: opslog
+    password: opslog
+
+inputs:
+  # Prefer HTTP/WS for SDK ingest: diagnostic payloads (env/sys/stack) often
+  # exceed OS UDP datagram limits (~9KiB on macOS) and are silently dropped.
+  - name: http-ingest
+    type: http
+
+  - name: ws-ingest
+    type: websocket
+
+  - name: tcp-json
+    type: tcp
+    listen: ":8141"
+    format: json
+
+  - name: grpc-ingest
+    type: grpc
+    listen: ":8900"
+
+pipeline:
+  - name: normalize
+    type: normalize
+
+outputs:
+  - name: fs
+    type: filesystem
+    path: ./data
+    archive_after_days: 7
+    archive_retain_days: 90
+
+  # Optional:
+  # - name: mysql
+  #   type: mysql
+  #   dsn: "opslog:opslog@tcp(mysql:3306)/opslog?parseTime=true&loc=UTC"
+  #
+  # - name: ch
+  #   type: clickhouse
+  #   dsn: "clickhouse://clickhouse:9000/opslog"

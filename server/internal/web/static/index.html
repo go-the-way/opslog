@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OpsLog Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/app.css" />
+</head>
+<body>
+  <div class="atmosphere" aria-hidden="true"></div>
+
+  <header class="shell-header">
+    <div class="brand-block">
+      <div class="brand">OpsLog</div>
+      <p class="brand-tag">Operations signal console</p>
+    </div>
+    <div class="header-meta">
+      <div id="health-badge" class="health" data-state="unknown" title="API health">
+        <span class="health-dot"></span>
+        <span class="health-label">Checking…</span>
+      </div>
+      <time id="clock" class="clock"></time>
+    </div>
+  </header>
+
+  <nav class="shell-nav" aria-label="Console sections">
+    <button type="button" data-tab="logs" class="nav-btn active">Logs</button>
+    <button type="button" data-tab="tail" class="nav-btn">Live Tail</button>
+    <button type="button" data-tab="metrics" class="nav-btn">Metrics</button>
+    <button type="button" data-tab="probes" class="nav-btn">Probes</button>
+    <button type="button" data-tab="configs" class="nav-btn">Config</button>
+    <button type="button" data-tab="archives" class="nav-btn">Archives</button>
+  </nav>
+
+  <main class="shell-main">
+    <section id="panel-logs" class="panel active" data-panel="logs">
+      <div class="panel-head">
+        <div>
+          <h1 class="panel-title">Log search</h1>
+          <p class="panel-desc">Filter by level, time, service, host, and message against stored signals.</p>
+        </div>
+        <div id="log-meta" class="meta-chip">—</div>
+      </div>
+      <div class="quick-ranges" id="log-ranges" aria-label="Quick time ranges">
+        <button type="button" class="chip" data-range="1h">Last 1h</button>
+        <button type="button" class="chip" data-range="6h">Last 6h</button>
+        <button type="button" class="chip" data-range="24h">Last 24h</button>
+        <button type="button" class="chip" data-range="7d">Last 7d</button>
+        <button type="button" class="chip" data-range="clear">Clear range</button>
+      </div>
+      <form id="log-form" class="filter-bar">
+        <label class="field field-time">
+          <span>From</span>
+          <input type="datetime-local" name="from" />
+        </label>
+        <label class="field field-time">
+          <span>To</span>
+          <input type="datetime-local" name="to" />
+        </label>
+        <label class="field field-level">
+          <span>Level</span>
+          <select name="level">
+            <option value="">Any</option>
+            <option value="debug">debug</option>
+            <option value="info">info</option>
+            <option value="warn">warn</option>
+            <option value="error">error</option>
+          </select>
+        </label>
+        <label class="field field-service">
+          <span>Service</span>
+          <input name="service" placeholder="api, worker…" autocomplete="off" />
+        </label>
+        <label class="field field-host">
+          <span>Host</span>
+          <input name="host" placeholder="optional" autocomplete="off" />
+        </label>
+        <label class="field grow field-msg">
+          <span>Message</span>
+          <input name="keyword" placeholder="message contains…" autocomplete="off" />
+        </label>
+        <label class="field field-trace">
+          <span>Trace ID</span>
+          <input name="trace_id" placeholder="optional" autocomplete="off" />
+        </label>
+        <div class="field actions">
+          <span>&nbsp;</span>
+          <button type="submit" class="btn primary">Search</button>
+        </div>
+      </form>
+      <div class="table-wrap" id="log-wrap" data-state="loading">
+        <table class="data-table cols-signal" id="log-table">
+          <colgroup>
+            <col class="col-time" />
+            <col class="col-level" />
+            <col class="col-service" />
+            <col class="col-host" />
+            <col class="col-msg" />
+            <col class="col-action" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Level</th>
+              <th>Service</th>
+              <th class="cell-host">Host</th>
+              <th>Message</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="log-results"></tbody>
+        </table>
+        <div id="log-empty" class="empty-state hidden">No log signals matched. Adjust filters or confirm a queryable output is configured.</div>
+        <div id="log-error" class="empty-state error hidden"></div>
+        <div id="log-loading" class="empty-state">Searching…</div>
+      </div>
+      <div class="pager">
+        <button type="button" id="log-prev" class="btn ghost" disabled>Previous</button>
+        <span id="log-page" class="pager-label">Page 1</span>
+        <button type="button" id="log-next" class="btn ghost" disabled>Next</button>
+      </div>
+    </section>
+
+    <section id="panel-tail" class="panel" data-panel="tail">
+      <div class="panel-head">
+        <div>
+          <h1 class="panel-title">Live Tail</h1>
+          <p class="panel-desc">Stream matching signals over WebSocket as they arrive.</p>
+        </div>
+        <div id="tail-status" class="live-status" data-state="idle">
+          <span class="live-pulse"></span>
+          <span class="live-label">Idle</span>
+        </div>
+      </div>
+      <form id="tail-form" class="filter-bar">
+        <label class="field field-level">
+          <span>Level</span>
+          <select name="level">
+            <option value="">Any</option>
+            <option value="debug">debug</option>
+            <option value="info">info</option>
+            <option value="warn">warn</option>
+            <option value="error">error</option>
+          </select>
+        </label>
+        <label class="field field-service">
+          <span>Service</span>
+          <input name="service" placeholder="optional" autocomplete="off" />
+        </label>
+        <label class="field field-host">
+          <span>Host</span>
+          <input name="host" placeholder="optional" autocomplete="off" />
+        </label>
+        <label class="field grow field-msg">
+          <span>Message</span>
+          <input name="keyword" placeholder="optional" autocomplete="off" />
+        </label>
+        <div class="field actions">
+          <span>&nbsp;</span>
+          <div class="btn-row">
+            <button type="submit" class="btn primary" id="tail-connect">Connect</button>
+            <button type="button" class="btn ghost" id="tail-stop" disabled>Stop</button>
+            <button type="button" class="btn ghost" id="tail-clear">Clear</button>
+          </div>
+        </div>
+      </form>
+      <div class="tail-toolbar">
+        <label class="check">
+          <input type="checkbox" id="tail-autoscroll" checked />
+          Auto-scroll
+        </label>
+        <span id="tail-count" class="meta-chip">0 events</span>
+      </div>
+      <div id="tail-results" class="tail-stream" aria-live="polite"></div>
+    </section>
+
+    <section id="panel-metrics" class="panel" data-panel="metrics">
+      <div class="panel-head">
+        <div>
+          <h1 class="panel-title">Metrics</h1>
+          <p class="panel-desc">Recent metric signals from collectors and hosts.</p>
+        </div>
+        <button type="button" id="metrics-refresh" class="btn primary">Refresh</button>
+      </div>
+      <div class="table-wrap" id="metrics-wrap" data-state="idle">
+        <table class="data-table cols-signal cols-no-level">
+          <colgroup>
+            <col class="col-time" />
+            <col class="col-service" />
+            <col class="col-host" />
+            <col class="col-msg" />
+            <col class="col-attrs" />
+            <col class="col-action" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Service</th>
+              <th class="cell-host">Host</th>
+              <th>Message</th>
+              <th>Attrs</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="metrics-results"></tbody>
+        </table>
+        <div id="metrics-empty" class="empty-state hidden">No metrics yet.</div>
+        <div id="metrics-error" class="empty-state error hidden"></div>
+        <div id="metrics-loading" class="empty-state hidden">Loading…</div>
+      </div>
+    </section>
+
+    <section id="panel-probes" class="panel" data-panel="probes">
+      <div class="panel-head">
+        <div>
+          <h1 class="panel-title">Probes</h1>
+          <p class="panel-desc">Connectivity and health probe results.</p>
+        </div>
+        <button type="button" id="probes-refresh" class="btn primary">Refresh</button>
+      </div>
+      <div class="table-wrap" id="probes-wrap" data-state="idle">
+        <table class="data-table cols-signal">
+          <colgroup>
+            <col class="col-time" />
+            <col class="col-level" />
+            <col class="col-service" />
+            <col class="col-host" />
+            <col class="col-msg" />
+            <col class="col-attrs" />
+            <col class="col-action" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Level</th>
+              <th>Service</th>
+              <th class="cell-host">Host</th>
+              <th>Result</th>
+              <th>Attrs</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="probes-results"></tbody>
+        </table>
+        <div id="probes-empty" class="empty-state hidden">No probe results yet.</div>
+        <div id="probes-error" class="empty-state error hidden"></div>
+        <div id="probes-loading" class="empty-state hidden">Loading…</div>
+      </div>
+    </section>
+
+    <section id="panel-configs" class="panel" data-panel="configs">
+      <div class="panel-head">
+        <div>
+          <h1 class="panel-title">Config snapshots</h1>
+          <p class="panel-desc">Captured configuration signals from agents.</p>
+        </div>
+        <button type="button" id="configs-refresh" class="btn primary">Refresh</button>
+      </div>
+      <div class="table-wrap" id="configs-wrap" data-state="idle">
+        <table class="data-table cols-signal cols-no-level">
+          <colgroup>
+            <col class="col-time" />
+            <col class="col-service" />
+            <col class="col-host" />
+            <col class="col-msg" />
+            <col class="col-action" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Service</th>
+              <th class="cell-host">Host</th>
+              <th>Summary</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="configs-results"></tbody>
+        </table>
+        <div id="configs-empty" class="empty-state hidden">No config snapshots yet.</div>
+        <div id="configs-error" class="empty-state error hidden"></div>
+        <div id="configs-loading" class="empty-state hidden">Loading…</div>
+      </div>
+    </section>
+
+    <section id="panel-archives" class="panel" data-panel="archives">
+      <div class="panel-head">
+        <div>
+          <h1 class="panel-title">Archives</h1>
+          <p class="panel-desc">Cold segments available for restore into hot storage.</p>
+        </div>
+        <button type="button" id="archives-refresh" class="btn primary">Refresh</button>
+      </div>
+      <div class="table-wrap" id="archives-wrap" data-state="idle">
+        <table class="data-table cols-archive">
+          <colgroup>
+            <col class="col-id" />
+            <col class="col-kind" />
+            <col class="col-range" />
+            <col class="col-count" />
+            <col class="col-size" />
+            <col class="col-time" />
+            <col class="col-action" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Kind</th>
+              <th>Range</th>
+              <th>Count</th>
+              <th>Size</th>
+              <th>Created</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="archives-results"></tbody>
+        </table>
+        <div id="archives-empty" class="empty-state hidden">No archives listed. Archiver may be unset or empty.</div>
+        <div id="archives-error" class="empty-state error hidden"></div>
+        <div id="archives-loading" class="empty-state hidden">Loading…</div>
+      </div>
+      <div id="archives-toast" class="toast hidden" role="status"></div>
+    </section>
+
+    <section id="panel-signal" class="panel panel-signal" data-panel="signal" hidden>
+      <div class="panel-head signal-detail-head">
+        <div class="signal-detail-nav">
+          <button type="button" id="signal-back" class="btn ghost">← Back</button>
+          <div>
+            <h1 class="panel-title">Signal detail</h1>
+            <p class="panel-desc">Structured view of one signal — fields, attrs, and stack when present.</p>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button type="button" id="signal-raw-toggle" class="btn ghost">Raw JSON</button>
+        </div>
+      </div>
+      <div id="signal-missing" class="empty-state error hidden">
+        This signal is no longer available in this session. Go back and open it again from the list.
+      </div>
+      <article id="signal-detail" class="signal-detail hidden" aria-live="polite">
+        <header class="signal-hero">
+          <div class="signal-hero-top">
+            <span id="signal-kind" class="kind-badge">log</span>
+            <span id="signal-level" class="level-badge debug">—</span>
+            <time id="signal-time" class="signal-time mono">—</time>
+          </div>
+          <h2 id="signal-msg" class="signal-msg">—</h2>
+          <dl class="signal-meta">
+            <div>
+              <dt>Service</dt>
+              <dd id="signal-service">—</dd>
+            </div>
+            <div>
+              <dt>Host</dt>
+              <dd id="signal-host">—</dd>
+            </div>
+            <div>
+              <dt>Trace ID</dt>
+              <dd id="signal-trace" class="mono">—</dd>
+            </div>
+          </dl>
+        </header>
+
+        <nav class="signal-tabs" role="tablist" aria-label="Signal detail sections">
+          <button type="button" class="signal-tab active" role="tab" data-signal-tab="overview" aria-selected="true">Overview</button>
+          <button type="button" class="signal-tab" role="tab" data-signal-tab="runtime" aria-selected="false">Runtime</button>
+          <button type="button" class="signal-tab" role="tab" data-signal-tab="env" aria-selected="false">Env</button>
+          <button type="button" class="signal-tab" role="tab" data-signal-tab="stack" aria-selected="false">Stack</button>
+          <button type="button" class="signal-tab" role="tab" data-signal-tab="raw" aria-selected="false">Raw</button>
+        </nav>
+
+        <div class="signal-tab-panels">
+          <div class="signal-tab-panel active" data-signal-panel="overview" role="tabpanel">
+            <section class="signal-section" id="signal-fields-section">
+              <h3 class="signal-section-title">Fields</h3>
+              <div class="kv-table-wrap">
+                <table class="kv-table" id="signal-fields">
+                  <tbody></tbody>
+                </table>
+              </div>
+            </section>
+            <section class="signal-section" id="signal-attrs-section">
+              <h3 class="signal-section-title">Other attributes</h3>
+              <div class="kv-table-wrap">
+                <table class="kv-table" id="signal-attrs">
+                  <thead>
+                    <tr>
+                      <th>Key</th>
+                      <th>Value</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div id="signal-attrs-empty" class="empty-inline hidden">No attributes.</div>
+            </section>
+          </div>
+
+          <div class="signal-tab-panel" data-signal-panel="runtime" role="tabpanel" hidden>
+            <div id="signal-runtime-empty" class="empty-inline hidden">No runtime / system snapshot on this signal.</div>
+            <section class="signal-section hidden" id="signal-diag-section">
+              <h3 class="signal-section-title">Runtime / profile</h3>
+              <div class="kv-table-wrap">
+                <table class="kv-table" id="signal-diag">
+                  <tbody></tbody>
+                </table>
+              </div>
+            </section>
+            <section class="signal-section hidden" id="signal-sys-section">
+              <h3 class="signal-section-title">System status</h3>
+              <div class="kv-table-wrap">
+                <table class="kv-table" id="signal-sys">
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div class="signal-sys-blocks">
+                <div class="signal-sys-block hidden" id="signal-disk-wrap">
+                  <h4 class="signal-subtitle">Disk</h4>
+                  <div class="kv-table-wrap">
+                    <table class="kv-table" id="signal-disk"><tbody></tbody></table>
+                  </div>
+                </div>
+                <div class="signal-sys-block hidden" id="signal-net-wrap">
+                  <h4 class="signal-subtitle">Network (cumulative)</h4>
+                  <div class="table-scroll">
+                    <table class="data-table compact" id="signal-net">
+                      <thead>
+                        <tr>
+                          <th>Iface</th>
+                          <th>RX</th>
+                          <th>TX</th>
+                          <th>RX pkts</th>
+                          <th>TX pkts</th>
+                        </tr>
+                      </thead>
+                      <tbody></tbody>
+                    </table>
+                  </div>
+                </div>
+                <div class="signal-sys-block hidden" id="signal-addrs-wrap">
+                  <h4 class="signal-subtitle">Addresses</h4>
+                  <div class="kv-table-wrap">
+                    <table class="kv-table" id="signal-addrs"><tbody></tbody></table>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <div class="signal-tab-panel" data-signal-panel="env" role="tabpanel" hidden>
+            <nav class="signal-subtabs" role="tablist" aria-label="Environment sections">
+              <button type="button" class="signal-subtab active" data-env-tab="startup" aria-selected="true">Startup env</button>
+              <button type="button" class="signal-subtab" data-env-tab="system" aria-selected="false">System env</button>
+              <button type="button" class="signal-subtab" data-env-tab="process" aria-selected="false">Process env</button>
+            </nav>
+            <div class="signal-env-panels">
+              <section class="signal-section signal-env-panel active" id="signal-startup-env-section" data-env-panel="startup">
+                <p class="signal-hint">Captured when the integrated app’s OpsLog Agent started.</p>
+                <div class="kv-table-wrap env-table-wrap">
+                  <table class="kv-table" id="signal-startup-env">
+                    <thead>
+                      <tr><th>Key</th><th>Value</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+                <div id="signal-startup-env-empty" class="empty-inline hidden">No startup env on this signal. Restart the integrated app with the latest SDK.</div>
+              </section>
+              <section class="signal-section signal-env-panel" id="signal-system-env-section" data-env-panel="system" hidden>
+                <p class="signal-hint">OS / shell system variables (/etc/environment + PATH/HOME/USER/…).</p>
+                <div class="kv-table-wrap env-table-wrap">
+                  <table class="kv-table" id="signal-system-env">
+                    <thead>
+                      <tr><th>Key</th><th>Value</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+                <div id="signal-system-env-empty" class="empty-inline hidden">No system env on this signal. Restart the integrated app with the latest SDK.</div>
+              </section>
+              <section class="signal-section signal-env-panel" id="signal-process-env-section" data-env-panel="process" hidden>
+                <p class="signal-hint">Full process environment at event time (secrets filtered).</p>
+                <div class="kv-table-wrap env-table-wrap">
+                  <table class="kv-table" id="signal-process-env">
+                    <thead>
+                      <tr><th>Key</th><th>Value</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+                <div id="signal-process-env-empty" class="empty-inline hidden">No process env on this signal. Restart the integrated app with the latest SDK.</div>
+              </section>
+            </div>
+          </div>
+
+          <div class="signal-tab-panel" data-signal-panel="stack" role="tabpanel" hidden>
+            <div id="signal-stack-empty" class="empty-inline hidden">No panic or stack trace on this signal.</div>
+            <section class="signal-section hidden" id="signal-panic-section">
+              <h3 class="signal-section-title">Panic</h3>
+              <pre id="signal-panic" class="stack-block stack-block--compact"></pre>
+            </section>
+            <section class="signal-section hidden" id="signal-stack-section">
+              <h3 class="signal-section-title">Stack trace</h3>
+              <pre id="signal-stack" class="stack-block"></pre>
+            </section>
+          </div>
+
+          <div class="signal-tab-panel" data-signal-panel="raw" role="tabpanel" hidden>
+            <section class="signal-section" id="signal-raw">
+              <h3 class="signal-section-title">Raw JSON</h3>
+              <pre id="signal-raw-body" class="stack-block stack-block--raw"></pre>
+            </section>
+          </div>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <footer class="shell-footer">
+    <span>OpsLog Web Console</span>
+    <span class="footer-sep">·</span>
+    <span>Embedded static UI</span>
+  </footer>
+
+  <dialog id="detail-dialog" class="detail-dialog">
+    <form method="dialog" class="detail-sheet">
+      <header>
+        <h2>Raw JSON</h2>
+        <button type="submit" class="btn ghost" value="close">Close</button>
+      </header>
+      <pre id="detail-body" class="detail-body"></pre>
+    </form>
+  </dialog>
+
+  <script src="/assets/app.js"></script>
+</body>
+</html>

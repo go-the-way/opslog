@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package opslog.ingest;
+
+option go_package = "github.com/go-the-way/opslog/pkg/transport/grpctx/ingest;ingest";
+
+service Ingest {
+  rpc Send(SendRequest) returns (SendReply);
+  rpc SendStream(stream SendRequest) returns (SendReply);
+}
+
+message SendRequest {
+  bytes payload = 1;
+}
+
+message SendReply {
+  int32 accepted = 1;
+}

@@ -1,0 +1,46 @@
+services:
+  opslog:
+    build: .
+    image: opslog:local
+    container_name: opslog
+    ports:
+      - "8600:8600"   # Web console + Query API + HTTP/WS ingest
+      - "8141:8141"   # TCP ingest
+      - "8900:8900"   # gRPC ingest
+    volumes:
+      - ./configs/opslog.yml:/app/opslog.yml:ro
+      - opslog-data:/app/data
+    restart: unless-stopped
+
+  mysql:
+    profiles: ["mysql", "full"]
+    image: mysql:8.4
+    container_name: opslog-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: opslog
+      MYSQL_USER: opslog
+      MYSQL_PASSWORD: opslog
+    ports:
+      - "3306:3306"
+    volumes:
+      - opslog-mysql:/var/lib/mysql
+
+  clickhouse:
+    profiles: ["clickhouse", "full"]
+    image: clickhouse/clickhouse-server:24.8
+    container_name: opslog-clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - opslog-ch:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
+volumes:
+  opslog-data:
+  opslog-mysql:
+  opslog-ch:

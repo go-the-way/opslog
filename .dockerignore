@@ -1,0 +1,11 @@
+.git
+.idea
+data
+dist
+*.md
+docs
+examples
+**/*_test.go
+tmp
+*.log
+.env
